@@ -14,7 +14,7 @@ pub async fn main() -> Result<()> {
     let mut cli = rasta::Rasta::connect(hostname, creds).await?;
 
     while let Some(msg) = cli.recv().await {
-        eprintln!("Got message: {}", msg)
+        eprintln!("Got message: {:?}", msg)
     }
 
     Ok(())

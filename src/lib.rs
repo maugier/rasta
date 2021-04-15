@@ -1,6 +1,7 @@
 use anyhow::{Error, Result, anyhow};
 use serde::{Serialize, Deserialize};
-use serde_json::json;
+use serde_json;
+use serde_json::{json, Value};
 use futures::stream::StreamExt;
 use futures::sink::SinkExt;
 use std::sync::Arc;
@@ -16,11 +17,24 @@ pub enum Credentials {
 }
 
 pub struct Rasta {
-    stream: mpsc::Receiver<Message>
+    stream: mpsc::Receiver<Value>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct RoomId(String);
+
+async fn json_recv<E: Into<Error>,S: Unpin + StreamExt<Item = Result<Message,E>>>(stream: &mut S) -> Result<serde_json::Value> {
+    if let Message::Text(msg) = stream.next()
+                            .await
+                            .ok_or(anyhow!("stream was empty"))?
+                            .map_err(Into::into)?
+    {
+        Ok(serde_json::from_str(&msg)?)
+    } else {
+        Err(anyhow!("Non-text message received"))
+    }
+          
+}
 
 impl Rasta {
 
@@ -47,13 +61,14 @@ impl Rasta {
             "support": ["1"]
         })).await?;
 
-        //let server_id = stream.next().await.ok_or(anyhow!("did not receive server id"))?;
+        let _server_version = json_recv(&mut stream).await?;
+        let _connected = json_recv(&mut stream).await?;
 
         let (down_tx, down_rx) = mpsc::channel(16);
 
         tokio::spawn(async move {
 
-            while let Some(Ok(msg)) = stream.next().await {
+            while let Ok(msg) = json_recv(&mut stream).await {
                     if let Err(e) = down_tx.send(msg).await {
                         eprintln!("Tokio send error: {}", e);
                         break
@@ -66,7 +81,7 @@ impl Rasta {
         Ok(Self { stream: down_rx })
     }
 
-    pub async fn recv(&mut self) -> Option<Message> {
+    pub async fn recv(&mut self) -> Option<Value> {
         self.stream.recv().await
     }
 
