@@ -1,6 +1,15 @@
 use reqwest::{Client, RequestBuilder, Url};
 use anyhow::{anyhow, Result};
 use serde::{Serialize, Deserialize};
+use serde_json::json;
+use futures::stream::StreamExt;
+use futures::sink::SinkExt;
+use std::sync::Arc;
+use async_tungstenite::tungstenite::Message;
+
+macro_rules! json_msg {
+    ($data:tt) => { async_tungstenite::tungstenite::Message::Text((json!($data)).to_string()) };
+}
 
 static APP_USER_AGENT: &str = concat!(
     env!("CARGO_PKG_NAME"),
@@ -10,6 +19,8 @@ static APP_USER_AGENT: &str = concat!(
 
 pub struct Rasta {
     backend: Url,
+    websocket: Url,
+    tlsconfig: Arc<tokio_rustls::rustls::ClientConfig>,
     client: Client,
     login: Option<LoginData>,
 }
@@ -61,15 +72,24 @@ struct ChannelReply {
 
 impl Rasta {
 
-    pub fn new(backend: &str) -> Result<Self> {
+    pub fn new(hostname: &str) -> Result<Self> {
 
-        let backend = Url::parse(backend)?;
+        let backend = Url::parse(&format!("https://{}", hostname))?;
+        let websocket = Url::parse(&format!("wss://{}/websocket", hostname))?;
+
+        let mut tlsconfig = tokio_rustls::rustls::ClientConfig::new();
+
+        tlsconfig.root_store = rustls_native_certs::load_native_certs()
+            .map_err(|(_store, err)| err)?;
+
+
+        let tlsconfig = Arc::new(tlsconfig);
 
         let client = Client::builder()
         .user_agent(APP_USER_AGENT)
         .build()?;
 
-        Ok(Self { backend, client, login: None })
+        Ok(Self { backend, websocket, tlsconfig, client, login: None })
     }
 
     pub async fn login(&mut self, user: String, password: String) -> Result<()> {
@@ -118,9 +138,36 @@ impl Rasta {
 
     }
 
-    pub async fn setTopic(&self, c: &Channel, topic: &str) -> Result<() >{
+    pub async fn setTopic(&self, c: &Channel, topic: &str) -> Result<()> {
         //self.client.post("/api/v1/channels.setTopic")
         todo!()
+    }
+
+    pub async fn websocket(&self) -> Result<()>  {
+
+        let tls = tokio_rustls::TlsConnector::from(Arc::clone(&self.tlsconfig));
+
+        let (mut stream, response) =
+            async_tungstenite::tokio::connect_async_with_tls_connector(&self.websocket, Some(tls)).await?;
+        eprintln!("Got response from websocket: {:?}", response);
+
+        stream.send(json_msg!({
+            "msg": "connect",
+            "version": "1",
+            "support": ["1"]
+        })).await?;
+
+        let server_id = stream.next().await.ok_or(anyhow!("did not receive server id"))?;
+
+        while let Some(msg) = stream.next().await {
+            let msg = msg?;
+            eprintln!("Received message: {:?}", msg);
+
+            
+
+        }
+
+        Ok(())
     }
 
 }

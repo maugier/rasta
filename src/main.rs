@@ -18,5 +18,9 @@ pub async fn main() -> Result<()> {
         eprintln!("#{} ({:?})", c.name, c);
     }
 
+    eprintln!("Starting websocket...");
+
+    cli.websocket().await?;
+
     Ok(())
 }
