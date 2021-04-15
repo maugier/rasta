@@ -8,19 +8,14 @@ pub async fn main() -> Result<()> {
         panic!("Incorrect arguments")
     }
 
-    let mut cli = rasta::Rasta::new(&args[1])?;
-    cli.login(args[2].to_owned(), args[3].to_owned()).await?;
-    
-    let chans = cli.channels().await?;
+    let hostname = &args[1];
+    let creds = rasta::Credentials::Clear { user: args[2].to_string() , password: args[3].to_string() };
 
-    eprintln!("Your channels are:");
-    for c in &chans {
-        eprintln!("#{} ({:?})", c.name, c);
+    let mut cli = rasta::Rasta::connect(hostname, creds).await?;
+
+    while let Some(msg) = cli.recv().await {
+        eprintln!("Got message: {}", msg)
     }
-
-    eprintln!("Starting websocket...");
-
-    cli.websocket().await?;
 
     Ok(())
 }
