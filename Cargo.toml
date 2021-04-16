@@ -3,6 +3,7 @@ authors = ["Maxime Augier <max@xolus.net>"]
 edition = "2018"
 name = "rasta"
 version = "0.1.0"
+private = true
 
 [dependencies]
 anyhow = "1.0"
