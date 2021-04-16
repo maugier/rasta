@@ -1,4 +1,5 @@
 use anyhow::Result;
+use tokio;
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
@@ -11,11 +12,12 @@ pub async fn main() -> Result<()> {
     let hostname = &args[1];
     let creds = rasta::Credentials::Clear { user: args[2].to_string() , password: args[3].to_string() };
 
-    let mut cli = rasta::Rasta::connect(hostname, creds).await?;
+    let mut cli = rasta::Rasta::connect(hostname).await?;
+    let _tokens = cli.login(creds).await?;
 
-    while let Some(msg) = cli.recv().await {
+    loop {
+        let msg = cli.recv().await?;
         eprintln!("Got message: {:?}", msg)
     }
 
-    Ok(())
 }
