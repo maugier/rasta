@@ -10,6 +10,9 @@ pub enum Message {
     Connect { version: String, support: Vec<String> },
     Method { id: String, method: String, params: Vec<Value> },
     Result(MethodResult),
+    Sub { id: String, name: String, params: Vec<Value> },
+    Unsub { id: String },
+    Nosub { id: String },
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
