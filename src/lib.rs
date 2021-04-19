@@ -1,10 +1,15 @@
-use anyhow::{Error, Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use ring::digest::{Digest, SHA256, digest};
-use siderite::{Connection, protocol::Message};
+use schema::Room;
+use siderite::{Connection, protocol::ServerMessage};
 use serde_json::{self, json, Value};
 
+pub mod schema;
+
+#[derive(Debug)]
 pub enum Credentials {
-    Clear { user: String, password: String }
+    Clear { user: String, password: String },
+    Token(String),
 }
 
 trait HexDigest {
@@ -36,6 +41,9 @@ impl Credentials {
                         "digest": digest
                     }
                 })
+            },
+            Self::Token(tok) => {
+                json!({"resume": tok})
             }
         }
     }
@@ -58,7 +66,12 @@ impl Rasta {
         self.connection.call("login".to_string(), vec![creds.json()]).await
     }
 
-    pub async fn recv(&mut self) -> Result<Message> {
+    pub async fn rooms(&mut self) -> Result<Vec<Room>> {
+        let reply = self.connection.call("rooms/get".to_string(), vec![]).await?;
+        Ok(serde_json::from_value(reply)?)
+    }
+
+    pub async fn recv(&mut self) -> Result<ServerMessage> {
         self.connection.recv().await.ok_or(anyhow!("fail"))
     }
 
