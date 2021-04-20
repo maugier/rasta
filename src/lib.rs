@@ -1,10 +1,13 @@
 use anyhow::{Result, anyhow};
 use ring::digest::{Digest, SHA256, digest};
 use schema::Room;
-use siderite::{Connection, protocol::ServerMessage};
+use siderite::Connection;
 use serde_json::{self, json, Value};
+use futures::Stream;
+pub use siderite::protocol::ServerMessage;
 
 pub mod schema;
+pub mod session;
 
 #[derive(Debug)]
 pub enum Credentials {
@@ -54,12 +57,21 @@ pub struct Rasta {
     connection: Connection,
 }
 
+pub struct Handle {
+    handle: siderite::connection::Handle,
+}
+
+
 impl Rasta {
 
     pub async fn connect(hostname: &str) -> Result<Self> {
 
         let url = format!("wss://{}/websocket", hostname);
         Ok(Self { connection: Connection::connect(&url).await? })
+    }
+
+    pub fn handle(&self) -> Handle {
+        Handle { handle: self.connection.handle() }
     }
 
     pub async fn login(&mut self, creds: Credentials) -> Result<Value> {
@@ -71,8 +83,41 @@ impl Rasta {
         Ok(serde_json::from_value(reply)?)
     }
 
+    pub fn stream(&mut self) -> &mut impl Stream<Item=ServerMessage> {
+        self.connection.stream() 
+    }
+
     pub async fn recv(&mut self) -> Result<ServerMessage> {
         self.connection.recv().await.ok_or(anyhow!("fail"))
     }
 
+    pub async fn subscribe_room(&mut self, room_id: String) -> Result<()> {
+        let id = room_id.clone();
+        Ok(self.connection.subscribe(id, "stream-room-messages".to_string(),
+         vec![ Value::String(room_id) , Value::Bool(false)])
+            .await?)
+    }
+
+    pub async fn subscribe_my_messages(&mut self) -> Result<()> {
+        self.subscribe_room("__my_messages__".to_string()).await
+    }
+
+}
+
+fn random_id(buf: &mut [u8]) {
+    for b in buf.iter_mut() {
+        *b = fastrand::alphabetic() as u8;
+    }
+}
+
+impl Handle {
+    pub async fn send_message(&mut self, room: &Room, msg: String) -> Result<()> {
+        let mut id = vec![0; 12];
+        random_id(&mut id);
+        let id = String::from_utf8(id)?;
+        self.handle.call("sendMessage".to_string(), vec![json!(
+            { "_id": id, "rid": room.id().to_string(), "msg": msg }
+        )]).await?;
+        Ok(())
+    }
 }

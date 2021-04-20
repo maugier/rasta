@@ -1,17 +1,27 @@
 use serde::{Serialize, Deserialize};
+use siderite::protocol::Timestamp;
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     #[serde(rename = "_id")]
-    id: String,
-    created_at: Timestamp,
-    roles: Vec<String>,
+    pub id: String,
+    pub created_at: Timestamp,
+    pub roles: Vec<String>,
     #[serde(rename = "type")]
-    usertype: String,
-    active: bool,
-    username: Option<String>,
-    name: Option<String>,
+    pub usertype: String,
+    pub active: bool,
+    pub username: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortUser {
+    #[serde(rename = "_id")]
+    pub id: String,
+    pub username: String,
+    pub name: String,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -54,17 +64,27 @@ pub enum Room {
     },
 }
 
-type Timestamp = String; //TODO proper timestamp serde
+impl Room {
+    pub fn id(&self) -> &str {
+        match self {
+            Room::Chat{id,..} => id,
+            Room::Direct{id,..} => id,
+            Room::LiveChat{id,..} => id,
+            Room::Private{id,..} => id,
+        }
+    }
+}
+//TODO proper timestamp serde
 
 #[derive(Serialize, Deserialize)]
 pub struct Message {
     #[serde(rename = "_id")]
-    id: String,
-    rid: String,
-    msg: String,
-    ts: Timestamp,
-    u: String,
-    updated: Timestamp,
+    pub id: String,
+    pub rid: String,
+    pub msg: String,
+    pub ts: Timestamp,
+    pub u: ShortUser,
+    pub updated: Timestamp,
 }
 
 #[cfg(test)]
