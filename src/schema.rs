@@ -76,16 +76,27 @@ impl Room {
 }
 //TODO proper timestamp serde
 
-#[derive(Serialize, Deserialize)]
-pub struct Message {
-    #[serde(rename = "_id")]
-    pub id: String,
-    pub rid: String,
-    pub msg: String,
-    pub ts: Timestamp,
-    pub u: ShortUser,
-    pub updated: Timestamp,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoomExtraInfo {
+    pub room_name: Option<String>,
+    pub room_participant: bool,
+    pub room_type: char,
 }
+
+#[derive(Deserialize)]
+pub struct RoomEventData {
+    pub msg: String,
+    pub rid: String,
+    #[serde(default)]
+    pub t: Option<String>,
+    pub u: ShortUser,
+}
+#[derive(Deserialize)]
+pub struct RoomEvent {
+    pub args: (RoomEventData ,RoomExtraInfo)
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -104,4 +115,41 @@ mod tests {
                         muted: vec![] });
     }
 
+    #[test]
+    fn deserialize_public_message() {
+
+        let source = r#"
+        {
+            "args": [
+              {
+                "_id": "BFa2866ehEnpHCmsc",
+                "_updatedAt": {
+                  "$date": 1618995166590
+                },
+                "channels": [],
+                "mentions": [],
+                "msg": "tralala pouet",
+                "rid": "fjGcXmddo5h8sp85n",
+                "ts": {
+                  "$date": 1618995166553
+                },
+                "u": {
+                  "_id": "hza29JX8SbnwqJwwh",
+                  "name": "syn",
+                  "username": "syn"
+                }
+              },
+              {
+                "roomName": "test",
+                "roomParticipant": true,
+                "roomType": "c"
+              }
+            ],
+            "eventName": "__my_messages__"
+          }      
+        "#;
+        serde_json::from_str::<RoomEvent>(source).unwrap();
+    }
+
 }
+

@@ -120,4 +120,19 @@ impl Handle {
         )]).await?;
         Ok(())
     }
+
+    pub async fn create_direct(&mut self, user: String) -> Result<Room> { 
+        self.handle.call("createDirectMessage".into()
+                                      , vec![user.into()])
+            .await?
+            .as_object_mut()
+            .and_then(|o| o.get_mut("rid"))
+            .and_then(|v| 
+                if let Value::String(id) = v.take() {
+                    Some(Room::Direct { id })
+                } else { None }
+            )
+            .ok_or(anyhow!("malformed createDirectMessage reply"))
+    }
+
 }

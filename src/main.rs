@@ -1,6 +1,7 @@
 use anyhow::Result;
 use tokio;
 
+
 #[tokio::main]
 pub async fn main() -> Result<()> {
  
@@ -20,9 +21,12 @@ pub async fn main() -> Result<()> {
 
     cli.subscribe_my_messages().await?;
 
+    let session = rasta::session::Session::from(&mut cli).await?;
+    eprintln!("\n\nSession info:\n{:?}", session);
+
     loop {
         let msg = cli.recv().await?;
-        eprintln!("Got message: {:?}", msg)
+        eprintln!("Got message: {}", msg.pretty());
     }
 
 }
