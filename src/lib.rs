@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use ring::digest::{Digest, SHA256, digest};
-use schema::{LoginReply, Presence, Room, ShortUser, Spotlight};
+use schema::{LoginReply, MessageID, Presence, Room, ShortUser, Spotlight};
 use siderite::{Connection, connection::MethodResult};
 use serde_json::{self, json, Value};
 use futures::Stream;
@@ -123,11 +123,7 @@ fn random_id(buf: &mut [u8]) {
 }
 
 impl Handle {
-    pub async fn send_message(&mut self, room: &Room, msg: String) -> Result<()> {
-        let mut id = vec![0; 12];
-        random_id(&mut id);
-        let id = String::from_utf8(id)?;
-
+    pub async fn send_message(&mut self, id: MessageID, room: &Room, msg: String) -> Result<()> {
         // Ignore result, we can't do anything about it anyway
         let _ = self.handle.call("sendMessage".to_string(), vec![json!(
             { "_id": id, "rid": room.id().to_string(), "msg": msg }

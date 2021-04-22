@@ -4,36 +4,27 @@ use anyhow::{Result, anyhow};
 
 #[derive(Debug, Clone)]
 pub struct Session {
-    pub rooms: Vec<Room>,
-    pub directs: HashMap<String,String>,
+    rooms: Vec<Room>,
+    directs: HashMap<String,String>,
 }
 
 
 impl Session {
+
+    pub fn rooms(&self) -> &[Room] {
+        &self.rooms
+    }
+
     pub async fn from(client: &mut Rasta) -> Result<Self> {
-        Ok(Self{ rooms: client.rooms().await?, directs: HashMap::new() })
+        Ok(Self{ rooms: client.rooms().await?, directs: HashMap::new()})
     }
 
     pub fn room_by_id(&self, id: &str) -> Option<&Room> {
-        let search = id;
         for room in &self.rooms {
-            match room {
-                Room::Chat { id, ..} if id == search => {
-                    return Some(room);
-                },
-                Room::Direct { id, ..} if id == search => {
-                    return Some(room);
-                },
-                Room::LiveChat { id, ..} if id == search => {
-                    return Some(room);
-                },
-                Room::Private { id, ..} if id == search => {
-                    return Some(room);
-                },
-                _ => {},
+            if room.id() == id {
+                return Some(room)
             }
         }
-
         None
     }
 
@@ -53,6 +44,7 @@ impl Session {
         None
     }
 
+
     pub async fn direct_room(&mut self, handle: &mut Handle, user: &str) -> Result<&Room> {
         if let Some(id) = self.directs.get(user) {
             self.room_by_id(id).ok_or(anyhow!(""))     
@@ -62,7 +54,13 @@ impl Session {
             self.rooms.push(room);
             Ok(self.rooms.last().unwrap())
         }
-    
+    }
+
+    pub async fn room_by_target(&mut self, handle: &mut Handle, target: &str) -> Option<&Room> {
+        match target.strip_prefix('#') {
+            Some(chan) => self.room_by_name(chan),
+            None => self.direct_room(handle, target).await.ok(),
+        } 
     }
 
 }

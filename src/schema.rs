@@ -4,6 +4,25 @@ use siderite::protocol::Timestamp;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UserID(String);
 
+impl PartialEq<str> for UserID {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+} 
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct MessageID(String);
+
+impl MessageID {
+    pub fn new() -> Self {
+        let mut x = vec![0; 16];
+        for x in &mut x {
+            *x = fastrand::alphanumeric() as u8;
+        }
+        MessageID(String::from_utf8(x).unwrap())
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Presence {
@@ -38,11 +57,11 @@ pub struct ShortUser {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all="camelCase")]
 pub struct LoginReply {
-    #[serde(rename = "_id")]
     pub id: UserID,
     pub token: String,
-    pub expires: Timestamp,
+    pub token_expires: Timestamp,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -111,6 +130,8 @@ pub struct Attachment {
 
 #[derive(Debug, Deserialize)]
 pub struct RoomEventData {
+    #[serde(rename="_id")]
+    pub id: MessageID,
     pub msg: String,
     pub rid: String,
     #[serde(default)]
