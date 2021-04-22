@@ -20,6 +20,9 @@ pub async fn main() -> Result<()> {
     let _tokens = cli.login(creds).await?;
 
     cli.subscribe_my_messages().await?;
+    cli.subscribe("stream-notify-logged".into(), vec!["user-status".into()]).await?;
+    cli.subscribe("stream-notify-user".into(), vec!["syn/rooms-changed".into()] ).await?;
+
 
     let session = rasta::session::Session::from(&mut cli).await?;
     eprintln!("\n\nSession info:\n{:?}", session);

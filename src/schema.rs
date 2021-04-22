@@ -1,15 +1,25 @@
 use serde::{Serialize, Deserialize};
 use siderite::protocol::Timestamp;
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct UserID(String);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Presence {
+    Online,
+    Busy,
+    Away,
+    Offline,
+}
+
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
-    #[serde(rename = "_id")]
-    pub id: String,
+    #[serde(rename = "_id")] pub id: UserID,
     pub created_at: Timestamp,
     pub roles: Vec<String>,
-    #[serde(rename = "type")]
-    pub usertype: String,
+    #[serde(rename = "type")] pub usertype: String,
     pub active: bool,
     pub username: Option<String>,
     pub name: Option<String>,
@@ -19,9 +29,20 @@ pub struct User {
 #[serde(rename_all = "camelCase")]
 pub struct ShortUser {
     #[serde(rename = "_id")]
-    pub id: String,
+    pub id: UserID,
     pub username: String,
-    pub name: String,
+    #[serde(rename = "name")]
+    pub realname: String,
+    #[serde(default, skip_serializing_if="Option::is_none")]
+    pub status: Option<Presence>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct LoginReply {
+    #[serde(rename = "_id")]
+    pub id: UserID,
+    pub token: String,
+    pub expires: Timestamp,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -39,7 +60,7 @@ pub enum Room {
         name: String,
         //#[serde(rename = "u")]
         //creator: User,
-        #[serde(skip_serializing_if="Option::is_none")]
+        #[serde(default, skip_serializing_if="Option::is_none")]
         topic: Option<String>,
         #[serde(default)]
         muted: Vec<String>,
@@ -51,7 +72,7 @@ pub enum Room {
         name: String,
         //#[serde(rename = "u")]
         //creator: User,
-        #[serde(skip_serializing_if="Option::is_none")]
+        #[serde(default, skip_serializing_if="Option::is_none")]
         topic: Option<String>,
         #[serde(default)]
         muted: Vec<String>,
@@ -76,32 +97,54 @@ impl Room {
 }
 //TODO proper timestamp serde
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoomExtraInfo {
     pub room_name: Option<String>,
     pub room_participant: bool,
     pub room_type: char,
 }
+#[derive(Debug, Deserialize)]
+pub struct Attachment {
+    title: String,
+}
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct RoomEventData {
     pub msg: String,
     pub rid: String,
     #[serde(default)]
     pub t: Option<String>,
     pub u: ShortUser,
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
 }
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct RoomEvent {
     pub args: (RoomEventData ,RoomExtraInfo)
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ShortRoom {
+    #[serde(rename="_id")] pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Spotlight {
+    pub users: Vec<ShortUser>,
+    pub rooms: Vec<ShortRoom>,
+}
 
 #[cfg(test)]
 mod tests {
 
     use super::*;
+
+    #[test]
+    fn serde_presence() {
+        assert_eq!( &serde_json::to_string(&Presence::Online).unwrap(), "\"online\"" );
+    }
 
     #[test]
     fn deserialize_sample_room() {

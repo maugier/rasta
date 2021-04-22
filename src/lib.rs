@@ -1,9 +1,10 @@
 use anyhow::{Result, anyhow};
 use ring::digest::{Digest, SHA256, digest};
-use schema::Room;
-use siderite::Connection;
+use schema::{LoginReply, Presence, Room, ShortUser, Spotlight};
+use siderite::{Connection, connection::MethodResult};
 use serde_json::{self, json, Value};
 use futures::Stream;
+use log::{debug};
 pub use siderite::protocol::ServerMessage;
 
 pub mod schema;
@@ -61,7 +62,6 @@ pub struct Handle {
     handle: siderite::connection::Handle,
 }
 
-
 impl Rasta {
 
     pub async fn connect(hostname: &str) -> Result<Self> {
@@ -74,12 +74,17 @@ impl Rasta {
         Handle { handle: self.connection.handle() }
     }
 
-    pub async fn login(&mut self, creds: Credentials) -> Result<Value> {
-        self.connection.call("login".to_string(), vec![creds.json()]).await
+    pub async fn login(&mut self, creds: Credentials) -> Result<Option<LoginReply>> {
+        Ok(self.connection.call("login".to_string(), vec![creds.json()]).await?
+            .ok()
+            .map(serde_json::from_value)
+            .transpose()?
+        )
+        
     }
 
     pub async fn rooms(&mut self) -> Result<Vec<Room>> {
-        let reply = self.connection.call("rooms/get".to_string(), vec![]).await?;
+        let reply = self.connection.call("rooms/get".to_string(), vec![]).await??;
         Ok(serde_json::from_value(reply)?)
     }
 
@@ -91,10 +96,17 @@ impl Rasta {
         self.connection.recv().await.ok_or(anyhow!("fail"))
     }
 
+    pub async fn subscribe(&mut self, name: String, params: Vec<Value>) -> Result<()> {
+        let mut id = vec![0; 10];
+        random_id(&mut id);
+        let id = String::from_utf8(id)?;
+        self.connection.subscribe(id, name, params).await
+    }
+
     pub async fn subscribe_room(&mut self, room_id: String) -> Result<()> {
         let id = room_id.clone();
         Ok(self.connection.subscribe(id, "stream-room-messages".to_string(),
-         vec![ Value::String(room_id) , Value::Bool(false)])
+         vec![ Value::String(room_id), Value::Bool(false) ])
             .await?)
     }
 
@@ -115,7 +127,9 @@ impl Handle {
         let mut id = vec![0; 12];
         random_id(&mut id);
         let id = String::from_utf8(id)?;
-        self.handle.call("sendMessage".to_string(), vec![json!(
+
+        // Ignore result, we can't do anything about it anyway
+        let _ = self.handle.call("sendMessage".to_string(), vec![json!(
             { "_id": id, "rid": room.id().to_string(), "msg": msg }
         )]).await?;
         Ok(())
@@ -124,7 +138,7 @@ impl Handle {
     pub async fn create_direct(&mut self, user: String) -> Result<Room> { 
         self.handle.call("createDirectMessage".into()
                                       , vec![user.into()])
-            .await?
+            .await??
             .as_object_mut()
             .and_then(|o| o.get_mut("rid"))
             .and_then(|v| 
@@ -133,6 +147,69 @@ impl Handle {
                 } else { None }
             )
             .ok_or(anyhow!("malformed createDirectMessage reply"))
+    }
+
+    pub async fn set_default_status(&mut self, p: Presence) -> Result<()> {
+        self.handle.call("UserPresence:setDefaultStatus".into(), vec![ serde_json::to_value(p)? ]).await??;
+        Ok(())
+    }
+
+    pub async fn set_away(&mut self, away: bool) -> Result<()> {
+        let method = "UserPresence:".to_string() +
+            if away { "away" } else { "online" };
+
+        self.handle.call(method, vec![]).await??;
+        Ok(())
+    }
+
+    pub async fn set_room(&mut self, room: &Room, name: String, value: Value) -> Result<MethodResult> {
+        self.handle.call("saveRoomSettings".into(), vec![ room.id().clone().into(), name.into(), value ]).await
+    }
+
+    pub async fn set_topic(&mut self, room: &Room, topic: Option<String>) -> Result<bool> {
+        debug!("Setting topic of {} to: {:?}", room.id(), topic);
+        let topic = topic.map(Value::String).unwrap_or(Value::Null);
+        Ok(self.set_room(room, "roomTopic".into(), topic).await?.is_ok())
+    }
+
+    pub async fn get_room_users(&mut self, room: &Room) -> Result<Vec<ShortUser>> {
+        let name: &str = if let Room::Chat { name, ..} = room { name } else { return Ok(vec![]) };
+        let r = self.handle.call("getRoomUsers".into(), vec![ name.into() ])
+            .await??;
+        debug!("=== get_room_users\n{:?}\n\n", r);
+        if let Value::Array(arr) = r {
+            Ok(arr.into_iter().map(|v| Ok(serde_json::from_value(v)?)).collect::<Result<Vec<_>>>()?)
+        } else {
+            Err(anyhow!("getRoomUsers reply wasn't an array"))
+        }
+    }
+
+    pub async fn lookup_room_id(&mut self, name: String) -> Result<Option<String>> {
+        let params = vec![name.clone().into(), json!([]), json!({ "users": false, "rooms": true})];
+        let response = self.handle.call("spotlight".into(), params)
+            .await??;
+        let data: Spotlight = serde_json::from_value(response)?;
+
+        debug!("Room lookup result: {:?}", data);
+        
+        for room in data.rooms {
+            if room.name == name {
+                return Ok(Some(room.id))
+            }
+        }
+
+        Ok(None)
+
+    }
+
+    pub async fn join_room(&mut self, rid: String, code: Option<String>) -> Result<bool> {
+        debug!("Joining {}", rid);
+        let rid: Value = rid.into();
+        let params = match code {
+            Some(code) => vec![rid, code.into()],
+            None => vec![rid]
+        };
+        Ok(self.handle.call("joinRoom".into(), params).await?.is_ok())
     }
 
 }

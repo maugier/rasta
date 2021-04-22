@@ -8,6 +8,7 @@ private = true
 [dependencies]
 anyhow = "1.0"
 futures = "0.3"
+log = "0.4"
 ring = "0.16"
 siderite = { path = "../siderite" }
 serde = { version = "1.0", features = ["derive"] }
