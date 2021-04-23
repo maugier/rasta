@@ -1,5 +1,7 @@
 use serde::{Serialize, Deserialize};
+use serde_json::{Map, Value};
 use siderite::protocol::Timestamp;
+use log::debug;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct UserID(String);
@@ -71,6 +73,8 @@ pub enum Room {
     Direct {
         #[serde(rename = "_id")]
         id: String,
+        #[serde(default, skip_serializing_if="Option::is_none")]
+        lm: Option<Timestamp>
     },
     #[serde(rename = "c")]
     Chat {
@@ -83,6 +87,9 @@ pub enum Room {
         topic: Option<String>,
         #[serde(default)]
         muted: Vec<String>,
+
+        #[serde(default, skip_serializing_if="Option::is_none")]
+        lm: Option<Timestamp>,
     },
     #[serde(rename = "p")]
     Private {
@@ -95,12 +102,19 @@ pub enum Room {
         topic: Option<String>,
         #[serde(default)]
         muted: Vec<String>,
+
+        #[serde(default, skip_serializing_if="Option::is_none")]
+        lm: Option<Timestamp>,
+
         ro: bool,       
     },
     #[serde(rename = "l")]
     LiveChat {
         #[serde(rename = "_id")]
-        id: String
+        id: String,
+
+        #[serde(default, skip_serializing_if="Option::is_none")]
+        lm: Option<Timestamp>,
     },
 }
 
@@ -113,6 +127,27 @@ impl Room {
             Room::Private{id,..} => id,
         }
     }
+
+    fn lm(&mut self) -> &mut Option<Timestamp> {
+        match self {
+            Room::Chat{lm,..} => lm,
+            Room::Direct{lm,..} => lm,
+            Room::LiveChat{lm,..} => lm,
+            Room::Private{lm,..} => lm,
+        }
+    }
+
+    pub fn is_timestamp_fresh(&mut self, ts: Timestamp) -> bool {
+        let lm = self.lm();
+        debug!("Message timestamp = {:?}, room timestamp = {:?}", ts, lm);
+        if lm.map(|ts2| ts2 > ts).unwrap_or(false) {
+            false
+        } else {
+            *lm = Some(ts);
+            true
+        }
+    }
+
 }
 //TODO proper timestamp serde
 
@@ -125,7 +160,7 @@ pub struct RoomExtraInfo {
 }
 #[derive(Debug, Deserialize)]
 pub struct Attachment {
-    title: String,
+    pub title: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,11 +169,14 @@ pub struct RoomEventData {
     pub id: MessageID,
     pub msg: String,
     pub rid: String,
+    pub ts: Timestamp,
     #[serde(default)]
     pub t: Option<String>,
     pub u: ShortUser,
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    #[serde(default, skip_serializing_if="serde_json::map::Map::is_empty")]
+    pub reactions: Map<String, Value>,
 }
 #[derive(Debug, Deserialize)]
 pub struct RoomEvent {
@@ -176,7 +214,8 @@ mod tests {
             Room::Chat {id: "GENERAL".to_string(), 
                         name: "general".to_string(), 
                         topic: None,
-                        muted: vec![] });
+                        muted: vec![],
+                        lm: None });
     }
 
     #[test]

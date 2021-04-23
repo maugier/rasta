@@ -139,7 +139,7 @@ impl Handle {
             .and_then(|o| o.get_mut("rid"))
             .and_then(|v| 
                 if let Value::String(id) = v.take() {
-                    Some(Room::Direct { id })
+                    Some(Room::Direct { id, lm: None }) //TODO check this
                 } else { None }
             )
             .ok_or(anyhow!("malformed createDirectMessage reply"))
