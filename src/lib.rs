@@ -208,4 +208,8 @@ impl Handle {
         Ok(self.handle.call("joinRoom".into(), params).await?.is_ok())
     }
 
+    pub async fn leave_room(&mut self, rid: String) -> Result<bool> {
+        Ok(self.handle.call("leaveRoom".into(), vec![rid.into()]).await?.is_ok())
+    }
+
 }
