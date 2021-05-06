@@ -160,7 +160,10 @@ pub struct RoomExtraInfo {
 }
 #[derive(Debug, Deserialize)]
 pub struct Attachment {
-    pub title: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
