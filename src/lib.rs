@@ -22,10 +22,10 @@ impl From<String> for Credentials {
         let mut split = creds.splitn(2, ":");
         let a = split.next();
         let b = split.next();
-        
+
         match (a,b) {
             (Some(user), Some(pass)) => Credentials::Clear { user: user.into(), password: pass.into() },
-            (Some(_), None) => Credentials::Token(creds), 
+            (Some(_), None) => Credentials::Token(creds),
             _ => panic!("str::splitn violated its contract"),
         }
     }

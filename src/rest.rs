@@ -37,7 +37,7 @@ impl Client {
             req
         }
 
-    } 
+    }
 
     pub fn new(host: &str) -> Self {
 
@@ -74,7 +74,7 @@ impl Client {
                        .await?
                        .json()
                        .await?;
-        
+
         match reply {
             LoginResult::Success { auth_token, user_id } => {
                 self.login = Some( Login { user_id, token: auth_token.clone() });
@@ -88,11 +88,23 @@ impl Client {
     }
 
     pub async fn channel_members(&self, room: &Room) -> Result<Vec<ShortUser>> {
-        Ok(self.request(Method::GET, "v1/channels.members")
-               .query(&["roomId", room.id()])
+
+        #[derive(Deserialize)]
+        struct Response { members: Vec<ShortUser> }
+
+        let endpoint = match room {
+            Room::Chat{..} => "v1/channels.members",
+            Room::Private{..} => "v1/groups.members",
+            _ => return Ok(vec![]),
+        };
+
+        Ok(self.request(Method::GET, endpoint)
+               .query(&[("roomId", room.id())])
                .send()
                .await?
-               .json().await?)
+               .json::<Response>()
+               .await?
+               .members)
     }
 
 }
