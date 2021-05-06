@@ -9,11 +9,26 @@ pub use siderite::protocol::ServerMessage;
 
 pub mod schema;
 pub mod session;
+pub mod rest;
 
 #[derive(Debug)]
 pub enum Credentials {
     Clear { user: String, password: String },
     Token(String),
+}
+
+impl From<String> for Credentials {
+    fn from(creds: String) -> Self {
+        let mut split = creds.splitn(2, ":");
+        let a = split.next();
+        let b = split.next();
+        
+        match (a,b) {
+            (Some(user), Some(pass)) => Credentials::Clear { user: user.into(), password: pass.into() },
+            (Some(_), None) => Credentials::Token(creds), 
+            _ => panic!("str::splitn violated its contract"),
+        }
+    }
 }
 
 trait HexDigest {
@@ -56,26 +71,36 @@ impl Credentials {
 
 pub struct Rasta {
     connection: Connection,
+    rest: rest::Client,
 }
 
 pub struct Handle {
     handle: siderite::connection::Handle,
+    rest: rest::Client,
 }
 
 impl Rasta {
 
     pub async fn connect(hostname: &str) -> Result<Self> {
 
-        let url = format!("wss://{}/websocket", hostname);
-        Ok(Self { connection: Connection::connect(&url).await? })
+        let rest = rest::Client::new(hostname);
+
+        let ws_url = format!("wss://{}/websocket", hostname);
+        let connection = Connection::connect(&ws_url).await?;
+
+        Ok(Self { connection, rest  })
     }
 
     pub fn handle(&self) -> Handle {
-        Handle { handle: self.connection.handle() }
+        Handle { handle: self.connection.handle(), rest: self.rest.clone() }
     }
 
     pub async fn login(&mut self, creds: Credentials) -> Result<Option<LoginReply>> {
-        Ok(self.connection.call("login".to_string(), vec![creds.json()]).await?
+
+        let ticket = self.rest.login(&creds).await?;
+        debug!("HTTPS Login successful");
+
+        Ok(self.connection.call("login".to_string(), vec![ticket.json()]).await?
             .ok()
             .map(serde_json::from_value)
             .transpose()?
@@ -169,15 +194,7 @@ impl Handle {
     }
 
     pub async fn get_room_users(&mut self, room: &Room) -> Result<Vec<ShortUser>> {
-        let name: &str = if let Room::Chat { name, ..} = room { name } else { return Ok(vec![]) };
-        let r = self.handle.call("getRoomUsers".into(), vec![ name.into() ])
-            .await??;
-        debug!("=== get_room_users\n{:?}\n\n", r);
-        if let Value::Array(arr) = r {
-            Ok(arr.into_iter().map(|v| Ok(serde_json::from_value(v)?)).collect::<Result<Vec<_>>>()?)
-        } else {
-            Err(anyhow!("getRoomUsers reply wasn't an array"))
-        }
+        self.rest.channel_members(room).await
     }
 
     pub async fn lookup_room_id(&mut self, name: String) -> Result<Option<String>> {
